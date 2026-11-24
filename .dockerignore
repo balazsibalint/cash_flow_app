@@ -12,3 +12,5 @@ invoices/
 backend/data/
 **/*.db
 **/*.sqlite3
+
+backend/tests/

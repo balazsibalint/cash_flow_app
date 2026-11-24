@@ -17,7 +17,8 @@ class Message(BaseModel):
 
 class Party(BaseModel):
     name: str | None = None
-    tax_id: str | None = None
+    tax_id: str | None = None  # ahogy a számlán áll
+    tax_keys: list[str] = Field(default_factory=list)  # az összes talált adószám normalizálva
 
 
 class ExtractedInvoice(BaseModel):

@@ -228,6 +228,11 @@ Az alkalmazás nem áll le, és a következő fájl feldolgozása is folytatódi
 - `PdfDocument.pages[i].words`: a `pdfplumber` `extract_words(keep_blank_chars=False, x_tolerance=1.5, y_tolerance=3)` eredménye (`text, x0, x1, top, bottom`).
 - `lines`: a szavak `top` szerint, ±3 pt toleranciával csoportosítva, majd `x0` szerint rendezve. Minden sor megkapja az oldalszámot és a globális sorindexet (a többoldalas számlák összefűzéséhez).
 - `full_text`: az oldalak `extract_text()` eredménye összefűzve (a doctype, a kulcsszavak és az LLM használja).
+- **Egymásra nyomtatott szöveg** (a 2. lépésben derült ki, `NWS/2026/0044`): a nagy betűs „Fizetendő összesen / Total due”
+  címke és a „8 743,00 GBP” érték ugyanarra a sávra esik, ezért az x szerint rendezett szöveg összekeveri őket
+  („Tota8l d7u4e3,00”). Kezelés: a szavakat a PDF-tartalomfolyam sorrendjében is előállítjuk (`use_text_flow=True`),
+  és ha egy sorban betűk és számjegyek keverednek egy szón belül, ezt a változatot használjuk; a végösszeget emellett
+  a fejlécben lévő ismételt „Total due” érték és a nettó + ÁFA ellenőrzés is megerősíti.
 
 ### 5.2 Bizonylattípus-felismerés (`doctype.py`, K7)
 
@@ -261,14 +266,19 @@ Emellett a **negatív bruttó végösszeg** a kinyerés után szintén `rejected
 | `payment_terms` | Fizetési feltétel, Payment terms, Zahlungsziel, Conditions de paiement, Condiciones de pago, Pagamento, Termin płatności: N dni |
 | `exclude_amount` | forintban, in HUF, ÁFA összege, VAT amount – ilyen sorból nem választunk végösszeget |
 
-**Címke→érték keresés** (`layout.py`): `find_value(label_patterns, parser)`
-1. Megkeressük a címke előfordulásait (a sor szövegében regex, a karakterpozícióból a szavak koordinátái).
-2. **Ugyanabban a sorban, a címkétől jobbra** álló szavakból az első, amelyet a típusos `parser` (dátum, összeg, kód) elfogad.
-3. Ha ilyen nincs: a **következő 1–3 sorban azok a szavak**, amelyek x-tartománya átfed a címke x-tartományával
-   (kétoszlopos fejléc). Ha egymás alatt több címke áll (pl. *Kiállítás dátuma* / *Fizetési határidő*), és alattuk ugyanabban
-   az oszlopban ugyanannyi érték, akkor **sorrend szerint párosítjuk** őket.
-4. Több találatnál prioritás: címkeprioritás, majd az, hogy van-e valódi érték, végül a dokumentumban elfoglalt hely
-   (végösszegnél a későbbi, mert a többoldalas számla összesítője a végén van).
+**Címke→érték keresés** (`layout.py`, megvalósítva a 3. lépésben):
+1. A sorokat **szegmensekre** bontjuk (a betűméretnél nagyobb vízszintes rés = új szegmens, pl. bal és jobb oszlop).
+   Címke csak a szegmens elején vagy `/` után állhat (kétnyelvű „Kiállítás dátuma / Invoice date”), így a mondatba ágyazott szó nem címke.
+2. **Ugyanabban a sorban:** a címke utáni szöveg a szegmensen belül, majd a következő szegmens – az első, amelyet a típusos `parser` elfogad.
+3. Ha a címke után nincs számjegy: a **legközelebbi (≤ 30 pt) sor, amelynek szavai a címke oszlopába esnek** (kétoszlopos fejléc).
+   Csak ez az egy sor számít, mert a távolabbiak már más mezőhöz (pl. tételsorhoz) tartoznak. Az egymás alatti címkéket
+   (*Kiállítás dátuma* / *Fizetési határidő*) a sorrendi párosítás helyett az oszlop szerinti illesztés kezeli: a mintákban ezek eltérő x-pozíción állnak.
+4. Több találatnál: dátumnál és számlaszámnál az első; összegeknél a nettó + ÁFA = bruttó egyezést adó jelölt, ennek híján a leggyakoribb
+   (holtversenynél a későbbi, mert a többoldalas számla összesítője a végén van).
+5. A címkeszótárban szándékosan **nincsenek oszlopfejlécek** (Nettó érték, Net amount, Wartość brutto, IVA, TVA, Imposta …),
+   mert alattuk tételsor áll.
+- **Vevő-címkék két szinten:** erős (Vevő, Bill to, Rechnungsempfänger, Facturé à, Cliente, Cessionario, Nabywca …) és gyenge
+  (Customer, Client, Kunde) – a gyengét csak erős hiányában használjuk, és ha utána „No./ID/#” áll, nem vevőblokk.
 
 **Felek és adószámok:**
 - Minden adószám-jelöltet kigyűjtünk pozícióval együtt: magyar `\d{8}-\d-\d{2}`, EU VAT `[A-Z]{2}[0-9A-Z]{8,12}` (ismert országkódokkal),
@@ -429,6 +439,10 @@ Az oldal sorrendje: fejléc → feltöltés → diagram → partnertábla → sz
 | `szamla_NWS-2026-0035.pdf` | kimenő, kétoszlopos NWS-sablon |
 | `scan_20260304_1148.pdf` | kimenő, olasz nyelvű, megtévesztő fájlnév |
 | `invoice_NW-2026-0004.pdf` | kimenő, angol |
+| `szamla_NWS-2026-0044.pdf` | kimenő, kétnyelvű kétoszlopos, **egymásra nyomtatott végösszeg** (3. lépésben hozzáadva) |
+
+A debug szkript (`backend/scripts/dump_extraction.py`) mind a 100 számla kinyert mezőit kilistázza, és az
+`expected.json` formátumában is ki tudja írni – kiindulásnak, de az értékeket kézzel kell ellenőrizni.
 
 ### 10.2 Az `expected.json` formátuma (a felhasználó tölti ki kézzel)
 

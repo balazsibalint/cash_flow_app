@@ -1,0 +1,57 @@
+{
+    "szamla_KT-2026-006.pdf": {
+        "invoice_number": "KT-2026/006",
+        "seller_name": "Kovács és Társa Könyvelőiroda Bt.",
+        "seller_tax": "21847502-1-42",
+        "buyer_name": "Nordwind Solutions Kft.",
+        "buyer_tax": "26481937-2-43",
+        "issue_date": "2026-01-05",
+        "supply_date": "2025-12-31",
+        "due_date": "2026-01-13",
+        "currency": "HUF",
+        "gross_amount": "427736.00",
+        "direction": "incoming"
+    },
+    "056_NW-2026-0014.pdf": {
+        "invoice_number": "NW-2026-0014",
+        "seller_name": "Nordwind Solutions Kft.",
+        "seller_tax": "26481937-2-43",
+        "buyer_name": "Duna Logisztika Zrt.",
+        "buyer_tax": "14829375-2-43",
+        "issue_date": "2026-03-10",
+        "supply_date": "2026-03-09",
+        "due_date": "2026-04-09",
+        "currency": "EUR",
+        "gross_amount": "1153.16",
+        "direction": "outgoing"
+    },
+    "factura_FAC-2026-0219.pdf": {
+        "invoice_number": "FAC-2026-0219",
+        "seller_name": "SOLUCIONES IBÉRICAS S.L.",
+        "seller_tax": "ESB86473921",
+        "buyer_name": "NORDWIND SOLUTIONS KFT.",
+        "buyer_tax": "26481937-2-43",
+        "issue_date": "2026-04-16",
+        "supply_date": "2026-04-10",
+        "due_date": "2026-05-16",
+        "currency": "EUR",
+        "gross_amount": "1493.78",
+        "direction": "incoming"
+    },
+    "facture_F2026-0147.pdf": {
+        "invoice_number": "F2026-0147",
+        "seller_name": "Lumière Conseil SARL",
+        "seller_tax": "FR47829461375",
+        "buyer_name": "Nordwind Solutions Kft.",
+        "buyer_tax": "26481937-2-43",
+        "issue_date": "2026-03-13",
+        "supply_date": "2026-03-11",
+        "due_date": "2026-04-12",
+        "currency": "EUR",
+        "gross_amount": "2668.00",
+        "direction": "incoming"
+    },
+    "": {
+        
+    }
+}
