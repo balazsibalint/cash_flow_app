@@ -1,0 +1,14 @@
+.git
+.env
+invoices/
+
+**/node_modules
+**/dist
+
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.venv
+backend/data/
+**/*.db
+**/*.sqlite3
