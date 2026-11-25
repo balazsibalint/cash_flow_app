@@ -73,10 +73,11 @@ backend/
     models.py                SQLAlchemy ORM modellek
     schemas.py               Pydantic I/O sémák + ExtractedInvoice
     api/
+      deps.py                függőségek (DB-session, IngestService-példány, PDF-mappa) – a tesztek felülírják
       invoices.py            feltöltés, lista, PDF letöltés, törlés
       report.py              diagram + partnertábla
     services/
-      ingest.py              egy fájl teljes feldolgozása (orkesztráció)
+      ingest.py              egy fájl teljes feldolgozása (orkesztráció), újrapróbálás (6.5), törlés (K12)
       pdf_text.py            PdfDocument: oldalak, szavak, sorok
       partners.py            partnerkulcs, megjelenített név
       mnb.py                 SOAP-kliens, cache, árfolyam-kiválasztás
@@ -98,7 +99,7 @@ backend/
     mnb/                     rögzített SOAP-válaszok
     test_normalize.py  test_layout.py  test_doctype.py  test_extraction.py
     test_validate.py   test_llm.py     test_mnb.py      test_fx.py
-    test_report.py     test_api.py
+    test_report.py     test_api.py     test_partners.py
 frontend/src/
   api.ts  types.ts  format.ts
   components/ UploadPanel.tsx CashflowChart.tsx PartnerTable.tsx InvoiceTable.tsx ConfirmDialog.tsx
@@ -435,6 +436,29 @@ Az `InvoiceOut` a 4.1 összes megjelenítendő mezőjét tartalmazza; a pénzös
 (a Decimal pontossága miatt), a `gross_huf`-ot egész számként.
 A statikus mount (`/`) a routerek **után** kerül regisztrálásra.
 
+### 8.1 Megvalósítás (6. lépés) – részletek és eltérések
+
+- **Feltöltés-ellenőrzés:** üres vagy `%PDF-` fejléc nélküli fájl (az első 1024 bájtban) → `400`; `MAX_UPLOAD_MB` felett → `413`. Ezeket nem mentjük.
+- **Eredmény-típusok:** a `pending_fx` számla `result: "created"` (a státusz és az üzenet jelzi, hogy árfolyamra vár).
+  Ha az MNB nem jegyzi a devizát (`MnbNoRate`), a számla `review` státuszt kap (`FX_NO_RATE`), mert nem váltható át.
+- **Dedup** minden státuszra érvényes, amelynél a kiállító adószáma és a számlaszám ismert (az `error`/`rejected` sor is
+  foglalja a kulcsot, hogy ugyanaz ne fusson újra). Kihagyáskor a már elmentett PDF-et töröljük.
+- **Árfolyam csak `ok` számlához:** a `review` számla adatai bizonytalanok, ezért nem kérdezzük le hozzá az MNB-t.
+- **Párhuzamosság (K10, 4 kérés):** az első valódi 100 fájlos próbán két, ugyanattól az új partnertől érkező számla
+  egyszerre próbálta létrehozni a partnert (`UNIQUE constraint failed: partners.tax_key`, 1 hibás feltöltés).
+  Javítás: a dedup-ellenőrzés + partner + beszúrás egy folyamaton belüli zár alatt fut, az MNB-lekérés viszont előtte
+  (a lassú hívás ne sorosítson); több folyamat esetére a UNIQUE-index + egy újrapróba véd.
+- **Újrapróbálás (6.5):** az első MNB-hiba után a kör megáll (nem kérdezzük számlánként a kieső szolgáltatást).
+  Az ideiglenes árfolyamú számlánál a jelölés akkor kerül le, amikor a teljesítés napjára már van jegyzés.
+- **Partnerek:** az adószám nélküli számla a név alapján kerül a partnerhez (`NAME:<név>`), vagy ahhoz az adószámos
+  partnerhez, amelynek egyik névváltozata ugyanerre normalizálódik. Ha se adószám, se név: „Ismeretlen partner”.
+  A névváltozatokat és a megjelenített nevet mentéskor és törléskor a partner számláiból számoljuk újra.
+  Holtversenynél a legkorábban rögzített változat nyer – párhuzamos feltöltésnél ez a beérkezés sorrendjétől függ.
+- **Riport:** a partnertáblában csak az a partner szerepel, akinek van `ok` számlája; a `counts` a státuszokon kívül
+  `total` és `provisional` (ideiglenes árfolyamú `ok` számlák) értéket is ad.
+- **Valódi ellenőrzés (LLM kikapcsolva):** a 100 fájl curl-lel, 4 párhuzamos kéréssel 18 mp alatt → 100 `ok`;
+  újrafeltöltés 7 mp → 100 `duplicate`. 12 partner, 23 MNB SOAP-hívás 4 devizára, átfedő nap nélkül; 0 LLM-hívás.
+
 ---
 
 ## 9. Frontend
@@ -516,7 +540,8 @@ Az összehasonlítás normalizált formában történik (adószám → `tax_key`
 | `test_mnb.py` | rögzített SOAP-válasz feldolgozása; hétvége és ünnepnap → előző jegyzés; `unit=100`; a cache miatt nincs második HTTP-hívás; részleges lefedettség esetén csak a hiányzó intervallum kérődik le; hiba → `MnbUnavailable` |
 | `test_fx.py` | kerekítés: `x,5` → felfelé, `x,4999` → lefelé; HUF-számla |
 | `test_report.py` | folytonos hónapok 0-val; partner-összevonás belföldi és EU adószámmal; rendezés; csak `ok` státusz számít |
-| `test_api.py` | feltöltés → created; ugyanaz újra → duplicate (hash), más fájl ugyanazzal a kulccsal → duplicate; nem PDF → 400; sérült PDF → error, az app tovább fut; törlés egyenként és összesen |
+| `test_api.py` | feltöltés → created; ugyanaz újra → duplicate (hash), más fájl ugyanazzal a kulccsal → duplicate; nem PDF → 400; sérült PDF → error, az app tovább fut; törlés egyenként és összesen; MNB-kiesés → pending_fx és újrapróbálás; ideiglenes árfolyam véglegesítése; párhuzamos feltöltés; a 15 fixture végig a riportig |
+| `test_partners.py` | belföldi és EU-adószám → egy kulcs; saját kulcs kizárása; név szerinti partner összevonása az adószámossal; megjelenített név (K13); árva partner törlése |
 
 A szintetikus teszt-PDF-ek (jóváíró, ismeretlen elrendezés, hiányzó határidő) a tesztben generálódnak a `reportlab` dev-függőséggel
 (`requirements-dev.txt`), így nem kell őket a repóban tárolni.

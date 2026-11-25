@@ -50,8 +50,22 @@ Megválaszoltam az összes kérdést a @TERV-KERDESEK.md fájlban. Nézd át, é
 
 ## 8. lépés - MNB árfolyamlekérdezés, gyorsítótárazás és átváltás
 #### Megvalósított fájlok: `mnb.py`, `fx.py`.
-- 
+- MNB SOAP kliens és XML feldolgozás
+- Adatbázis gyorsítótár
+- Árfolyam-kiválasztás és visszatekintési ablak
+- Forintosítás és pénzügyi kerekítés
 
+## 9. lépés - Számlabefogadási folyamat, partnerkezelés, cash-flow riport és REST API végpontok
+#### Megvalósított fájlok: `ingest.py`, `partners.py`, `report.py`, `deps.py`, `invoices.py`, `report.py`.
+- Teljes befogadási és életciklus folyamat: `SHA-256 hash → kinyerési pipeline → duplikátum-ellenőrzés → partnerkezelés → MNB-árfolyam lekérés és forintosítás → mentés`
+- Partnerazonosítás és összevonás
+- Cash flow riport és összesítések: Kizárólag az `ok` státuszú számlákból épít lyukmentes havi idősort (a számla nélküli köztes hónapok `0` értékkel szerepelnek), forgalom szerint rendezi a partnereket, és visszaadja az egyes státuszok darabszámait.
+- REST API végpontok
+
+
+## 10. lépés - 
+#### Megvalósított fájlok: ``.
+- 
 
 ## Szabályfájl
 #### Készítettem egy [CLAUDE.md](/CLAUDE.md) szabályfájlt, amiben rögzítettem a következő szabályokat:
