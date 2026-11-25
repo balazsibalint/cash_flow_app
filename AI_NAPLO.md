@@ -39,10 +39,18 @@ Megválaszoltam az összes kérdést a @TERV-KERDESEK.md fájlban. Nézd át, é
 - Elrendezés és címkeillesztés: Címke–érték párosítás ugyanabban a szegmensben, a jobbra lévő szegmensben vagy a kétoszlopos fejléc oszlopa alatti legközelebbi sorban.
 - Dokumentumtípus felismerés: Jóváíró, díjbekérő és előlegszámla azonosítása kizárólag a fejlécben keresve
 - Szabályalapú kinyerő és debug eszköz: Felek azonosítása szövegblokkok alapján, irány meghatározása, a bruttó végösszeg kiválasztása a nettó + ÁFA matematikai egyezés alapján
+- Az [expected.json](/backend/tests/expected.json) fájllal való összehasonlító teszt is sikeresen lefut
 
-## 7. lépés - 
+## 7. lépés - Validáció, tartalék LLM feldolgozás és teljes kinyerési folyamat
+#### Megvalósított fájlok: `validate.py`, `llm.py`, `llm_budget.py`, `pipeline.py`.
+- Üzleti validáció és dátumpótlás: Ellenőrzések magyar hibaüzenetekkel és iránymeghatározással. Hiányzó teljesítési dátum esetén a kiállítás dátuma kerül behelyettesítésre, a hiányzó fizetési határidő pedig a fizetési feltételből számolódik
+- OpenAI kompatibilis LLM-kliens: Egységes kliens, amely strukturált `json_schema` móddal indul, hálózati hibánál egyszer újrapróbál. A kimeneten sémavalidáció fut (a számlaszámnak és a végösszegnek szó szerint szerepelnie kell a PDF szövegében).
+- Költségkontroll: Napi LLM-hívási keret ellenőrzése és hívásnaplózás az `llm_calls` táblába.
+- Teljes kinyerési folyamat: `doctype` --> saját cég ellenőrzése --> szabályalapú kinyerés --> validáció --> LLM-tartalék (kizárólag hiba esetén) --> záróvalidáció lépése, `ok`, `review` vagy `rejected` végső státuszok.
+
+## 8. lépés - MNB árfolyamlekérdezés, gyorsítótárazás és átváltás
+#### Megvalósított fájlok: `mnb.py`, `fx.py`.
 - 
-
 
 
 ## Szabályfájl

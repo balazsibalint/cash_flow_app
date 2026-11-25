@@ -11,7 +11,7 @@
 | # | Téma | Döntés |
 |---|---|---|
 | K1 | Kinyerési stratégia | **Szabályalapú elsődleges**, LLM csak tartalék, ha a validáció elbukik |
-| K2 | LLM-modell | `google/gemini-2.5-flash` (OpenRouter), env-ből felülírható |
+| K2 | LLM-modell | `google/gemini-3.5-flash-lite` (OpenRouter), env-ből felülírható – az eredeti `google/gemini-2.5-flash` helyett, a 4. lépés után |
 | K3 | LLM-kliens | **Egyetlen OpenAI-kompatibilis kliens**, átállítható base URL (OpenRouter élesben, Gemini OpenAI-kompatibilis végpontja fejlesztéshez) |
 | K4 | Duplikáció | Fájl-hash gyorsszűrő + **kiállító adószám-kulcs + normalizált számlaszám**; ütközéskor **kihagyás** „már feldolgozva” jelzéssel |
 | K5 | Bizonytalan számla | „**Ellenőrzendő**” státusz, látszik a listában, **nem számít bele** a kimutatásba |
@@ -115,10 +115,10 @@ frontend/src/
 |---|---|---|
 | `LLM_PROVIDER` | `openrouter` | `openrouter` (éles/kiértékelés) · `gemini` (fejlesztés, saját kulccsal) · `none` (LLM kikapcsolva) |
 | `OPENROUTER_API_KEY` | *(üres)* | Ha a kiválasztott szolgáltató kulcsa üres, az LLM-tartalék ki van kapcsolva, és az app csak szabályalapon működik |
-| `OPENROUTER_MODEL` | `google/gemini-2.5-flash` | K2 |
+| `OPENROUTER_MODEL` | `google/gemini-3.5-flash-lite` | K2 |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | |
 | `GEMINI_API_KEY` | *(üres)* | Csak fejlesztéshez (CLAUDE.md 2. szabály) |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | A `gemini-2.5-flash` a fejlesztői kulccsal 404-et adott (4. lépés), ezért cseréltük |
 | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` | A Gemini OpenAI-kompatibilis végpontja |
 | `LLM_TIMEOUT_SECONDS` | `60` | |
 | `LLM_MAX_CONCURRENCY` | `2` | Egyszerre futó LLM-hívások száma |
@@ -316,6 +316,17 @@ Emellett a **negatív bruttó végösszeg** a kinyerés után szintén `rejected
 
 A hibák az LLM-tartalékot indítják; ha az LLM után is maradnak, a számla `review` státuszt kap.
 
+**Megvalósítás (4. lépés) – kiegészítések:**
+- A `SUM_MISMATCH` tűrése HUF-nál 1 Ft (egész forintra kerekített ÁFA), más devizánál 0,01.
+- Az LLM-hívás **előtt** elutasítjuk (K7) a különleges bizonylatot és azt a dokumentumot, amelyen a cégünk
+  (adószám vagy név) **egyáltalán nem szerepel** – ezekre LLM-et hívni felesleges költség lenne.
+  Ha a cégünk szerepel, de az oldala nem állapítható meg, az `OWN_COMPANY_SIDE` hiba → LLM / `review`.
+- Ha az LLM-eredmény is elbukik, a kevesebb hibát tartalmazó változat marad (döntetlennél a szabályalapú),
+  és az `LLM_FAILED` üzenet az LLM-eredmény hibáit is felsorolja.
+- További üzenetkódok: `LLM_DISABLED` (info), `LLM_FAILED` (figyelmeztetés), `LLM_UNGROUNDED` (hiba),
+  `LLM_USED` (info – miért kellett az LLM), `LLM_DISAGREES` (figyelmeztetés), `REJECTED`.
+- Az irány-meghatározás egyetlen függvényben van (`validate.direction_of`); a `rules.determine_direction` ezt hívja.
+
 ### 5.6 LLM-tartalék (`llm.py`)
 
 - **Kliens:** `httpx` POST a `{OPENROUTER_BASE_URL}/chat/completions` végpontra (OpenAI-formátum), `temperature: 0`,
@@ -334,6 +345,14 @@ A hibák az LLM-tartalékot indítják; ha az LLM után is maradnak, a számla `
   napi limit (`LLM_MAX_CALLS_PER_DAY`), párhuzamossági korlát (`LLM_MAX_CONCURRENCY`), timeout, legfeljebb 1 újrapróba hálózati hibánál.
   Kulcs nélkül az LLM ki van kapcsolva, és a számla `review` státuszt kap.
 - **A kulcs soha nem kerül naplóba.**
+
+**Megvalósítás (4. lépés) – eltérések és részletek:**
+- A modellnek a `layout_text`-et küldjük (a rekonstruált sorok, oldaljelzéssel) a `full_text` helyett, mert az egymásra
+  nyomtatott szövegnél (`NWS/2026/0044`) a `full_text` olvashatatlan; legfeljebb 20 000 karakter.
+- A horgonyzás a `full_text` és a `layout_text` együttesén történik.
+- Az LLM-eredmény hiányzó mezőit a szabályalapú eredményből pótoljuk, és az LLM `document_type`-ja is elutasíthat (K7).
+- Költségkeret és napló: `services/llm_budget.py` (`DbLlmBudget`, `llm_calls` tábla); a kliens csak egy
+  `try_acquire()/record()` interfészt ismer, így a kinyerés DB nélkül tesztelhető.
 
 ### 5.7 Partnerek (`partners.py`)
 
@@ -364,6 +383,20 @@ A hibák az LLM-tartalékot indítják; ha az LLM után is maradnak, a számla `
 - `HUF` → `rate=1, unit=1, rate_date=supply_date`.
 - Ha `supply_date > a legutolsó jegyzés napja`, és a `supply_date ≥ ma` → `fx_provisional=True` (K8).
 - Hálózati vagy SOAP-hiba → `MnbUnavailable` → a számla `status=pending_fx` (K9).
+
+### 6.3.1 Megvalósítás (5. lépés) – részletek és eltérések
+- A lekérést **hónapra kerekítjük**: `[hónap eleje(teljesítés − 10 nap), hónap vége(teljesítés)]`, a mai napnál levágva.
+  Így egy év számláihoz devizánként kb. 12 SOAP-hívás kell, nem számlánként egy; a lefedett időszakokat az
+  `mnb_fetches` alapján kivonjuk, ezért egy nap/deviza sosem kerül kétszer lekérésre (teszt: `test_no_day_currency_is_requested_twice`).
+- „Ma” kezelése: ha egy lekérés a lekérés napját is tartalmazta, az a nap csak aznap számít lefedettnek, másnap újra lekérjük
+  (a jegyzés napközben jelenik meg). A napot UTC szerint számoljuk (az éjfél körüli 1–2 órás eltérés elhanyagolható).
+- Ha a 10 napos visszatekintésben nincs jegyzés, 40 napra bővítünk; ha így sincs, `MnbNoRate` (az MNB nem jegyzi a devizát).
+- Ideiglenes (K8): ha `teljesítés ≥ ma`, és a talált jegyzés korábbi a teljesítésnél.
+- **Valódi ellenőrzés:** EUR 2026-03-09 → 396,92 (egyezik a nyers MNB-válasszal), vasárnap 2026-03-08 → péntek 03-06 jegyzése.
+  Az `NW-2026-0014` számlára nyomtatott 396,92-es árfolyam tehát **helyes MNB-árfolyam** – a 0. fejezetben „csapdának” jelölt
+  adatból valójában csak a forintos ÁFA-összeg (97 309 Ft) veszélyes, mert az nem a végösszeg. Ettől függetlenül
+  mindig a lekért MNB-árfolyamot használjuk.
+- Valódi MNB-válasz teszt-fixture-ként: `backend/tests/mnb/rates_2026_03.xml`.
 
 ### 6.4 Átváltás
 `gross_huf = (gross_amount × rate / unit).quantize(Decimal("1"), ROUND_HALF_UP)` → int. Az összesítés ezután történik.
@@ -476,6 +509,10 @@ Az összehasonlítás normalizált formában történik (adószám → `tax_key`
 | `test_extraction.py` | paraméterezett teszt az `expected.json` minden bejegyzésére (ha a fájl még nincs meg, `skip`) |
 | `test_validate.py` | minden validációs kód |
 | `test_llm.py` | `httpx.MockTransport`: sémahiba, horgonyzási hiba, sikeres válasz, kulcs nélküli mód, napi limit – **valódi LLM-hívás nélkül** |
+| `test_pipeline.py` | a teljes folyamat hamis LLM-mel: a fixture-ökön nincs LLM-hívás; tartalék-ág, hallucináció, elutasítások, K6-következtetés |
+
+> A szintetikus PDF-ek a reportlab beépített Helvetica betűtípusával készülnek, amely nem tud `ő`/`ű` betűt –
+> ezekben a tesztekben ezért angol címkék szerepelnek; a magyar címkéket a valódi fixture-PDF-ek fedik le.
 | `test_mnb.py` | rögzített SOAP-válasz feldolgozása; hétvége és ünnepnap → előző jegyzés; `unit=100`; a cache miatt nincs második HTTP-hívás; részleges lefedettség esetén csak a hiányzó intervallum kérődik le; hiba → `MnbUnavailable` |
 | `test_fx.py` | kerekítés: `x,5` → felfelé, `x,4999` → lefelé; HUF-számla |
 | `test_report.py` | folytonos hónapok 0-val; partner-összevonás belföldi és EU adószámmal; rendezés; csak `ok` státusz számít |

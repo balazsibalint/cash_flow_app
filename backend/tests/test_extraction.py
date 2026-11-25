@@ -154,7 +154,7 @@ def test_unknown_layout_with_weak_buyer_label_and_chf():
 def test_payment_terms_without_due_date():
     pdf = make_pdf([
         (40, 40, "Valami Kft."), (40, 54, "Adószám: 12345678-2-42"),
-        (40, 90, "Vevő"), (40, 104, "Nordwind Solutions Kft."), (40, 118, "Adószám: 26481937-2-43"),
+        (40, 90, "Bill to"), (40, 104, "Nordwind Solutions Kft."), (40, 118, "Adószám: 26481937-2-43"),
         (300, 90, "Számlaszám: V-1"), (300, 104, "Kiállítás dátuma: 2026.05.04."),
         (40, 400, "Fizetési feltétel: 15 nap"),
     ])

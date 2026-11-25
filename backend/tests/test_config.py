@@ -5,7 +5,7 @@ def test_defaults_without_key_disable_llm():
     s = Settings(llm_provider="openrouter", openrouter_api_key="")
     assert s.llm is None
     assert s.llm_enabled is False
-    assert s.openrouter_model == "google/gemini-2.5-flash"
+    assert s.openrouter_model == "google/gemini-3.5-flash-lite"
 
 
 def test_openrouter_selected():
@@ -14,7 +14,7 @@ def test_openrouter_selected():
     assert s.llm.provider == "openrouter"
     assert s.llm.base_url == "https://openrouter.ai/api/v1"
     assert s.llm.api_key == "k-or"
-    assert s.llm.model == "google/gemini-2.5-flash"
+    assert s.llm.model == "google/gemini-3.5-flash-lite"
 
 
 def test_gemini_selected_uses_same_client_shape():
@@ -23,7 +23,7 @@ def test_gemini_selected_uses_same_client_shape():
     assert s.llm.provider == "gemini"
     assert s.llm.api_key == "k-gem"
     assert "generativelanguage.googleapis.com" in s.llm.base_url
-    assert s.llm.model == "gemini-2.5-flash"
+    assert s.llm.model == "gemini-3.5-flash-lite"
 
 
 def test_provider_none_disables_llm_even_with_key():
@@ -36,7 +36,7 @@ def test_empty_env_value_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("OPENROUTER_MODEL", "")
     monkeypatch.setenv("MAX_UPLOAD_MB", "")
     s = Settings()
-    assert s.openrouter_model == "google/gemini-2.5-flash"
+    assert s.openrouter_model == "google/gemini-3.5-flash-lite"
     assert s.max_upload_mb == 20
     assert s.max_upload_bytes == 20 * 1024 * 1024
 

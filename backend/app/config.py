@@ -19,10 +19,10 @@ class Settings(BaseSettings):
     # LLM
     llm_provider: Literal["openrouter", "gemini", "none"] = "openrouter"
     openrouter_api_key: str = ""
-    openrouter_model: str = "google/gemini-2.5-flash"
+    openrouter_model: str = "google/gemini-3.5-flash-lite"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     llm_timeout_seconds: float = 60
     llm_max_concurrency: int = 2

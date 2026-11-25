@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from app.config import get_settings
+from app.services.extraction.pipeline import own_company, process
 from app.services.extraction.rules import determine_direction, extract, own_tax_keys
 from app.services.pdf_text import PdfReadError, load_pdf
 
@@ -22,8 +23,12 @@ def row_for(path: Path) -> dict:
         return {"error": str(exc)}
     inv = extract(doc)
     direction = determine_direction(inv, own_tax_keys(s.own_tax_number, s.own_eu_vat), s.own_company_name)
+    # A teljes folyamat LLM nélkül: a szabályalapú eredmény átmegy-e a validáción.
+    res = process(doc, own_company(s), llm=None, file_sha256=path.name)
     as_str = lambda v: None if v is None else (format(v, "f") if isinstance(v, Decimal) else str(v))
     return {
+        "_status": res.status,
+        "_messages": [f"{m.code}: {m.text}" for m in res.messages],
         "invoice_number": inv.invoice_number,
         "seller_name": inv.seller.name,
         "seller_tax": inv.seller.tax_id,
@@ -59,8 +64,10 @@ def main() -> int:
         if r.get("_net") and r.get("_vat") and r.get("gross_amount"):
             sum_ok = "" if Decimal(r["_net"]) + Decimal(r["_vat"]) == Decimal(r["gross_amount"]) else " SUM!"
         flag = (" HIÁNYZIK: " + ",".join(empty) if empty else "") + sum_ok
+        if r.get("_status") != "ok":
+            flag += f" [{r.get('_status')}: {'; '.join(r.get('_messages') or [])}]"
         missing += bool(flag)
-        print(f"{name:34} {r.get('direction') or '-':8} {r.get('invoice_number') or '-':16} "
+        print(f"{name:34} {r.get('_status') or 'error':8} {r.get('direction') or '-':8} {r.get('invoice_number') or '-':16} "
               f"{(r.get('seller_name') or '-')[:22]:22} | {(r.get('buyer_name') or '-')[:22]:22} "
               f"{r.get('issue_date') or '-'} {r.get('supply_date') or '-'} {r.get('due_date') or '-'} "
               f"{r.get('gross_amount') or '-':>12} {r.get('currency') or '-'}{flag}")

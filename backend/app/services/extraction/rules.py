@@ -11,12 +11,12 @@ from app.services.extraction.normalize import (
     find_currency,
     find_tax_ids,
     fold,
-    normalize_company_name,
     normalize_currency,
     normalize_tax_id,
     parse_amount,
     parse_date,
 )
+from app.services.extraction.validate import OwnCompany, direction_of
 from app.services.pdf_text import Line, PdfDocument
 
 BUYER_BLOCK_MAX_GAP = 22.0  # pt – ennél nagyobb függőleges rés lezárja a vevő blokkját
@@ -258,17 +258,7 @@ def extract(doc: PdfDocument) -> ExtractedInvoice:
 
 def determine_direction(inv: ExtractedInvoice, own_keys: set[str], own_name: str) -> str | None:
     """`outgoing`, ha a mi cégünk a kiállító; `incoming`, ha a vevő; különben None."""
-    seller_own = bool(own_keys & set(inv.seller.tax_keys))
-    buyer_own = bool(own_keys & set(inv.buyer.tax_keys))
-    if seller_own != buyer_own:
-        return "outgoing" if seller_own else "incoming"
-    if not seller_own and not buyer_own:
-        own = normalize_company_name(own_name)
-        s = normalize_company_name(inv.seller.name) == own
-        b = normalize_company_name(inv.buyer.name) == own
-        if s != b:
-            return "outgoing" if s else "incoming"
-    return None
+    return direction_of(inv, OwnCompany(own_name, frozenset(own_keys)))
 
 
 def own_tax_keys(own_tax_number: str, own_eu_vat: str) -> set[str]:

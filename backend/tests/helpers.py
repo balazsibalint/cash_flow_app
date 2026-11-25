@@ -25,7 +25,11 @@ def make_doc(rows: list[tuple[float, list[tuple[float, str]]]], size: float = 9.
 
 
 def make_pdf(items: list[tuple[float, float, str]] | None, size: float = 9.0, draw_only: bool = False) -> bytes:
-    """Valódi PDF: `items` = [(x, top, szöveg)], a koordináták felülről mérve (mint a pdfplumber-nél)."""
+    """Valódi PDF: `items` = [(x, top, szöveg)], a koordináták felülről mérve (mint a pdfplumber-nél).
+
+    Figyelem: a beépített Helvetica csak Latin-1 karaktereket tud – az `ő`/`ű` betűk elvesznek,
+    ezért a szintetikus PDF-ekben ilyen betűt tartalmazó címkét ne használj (pl. „Vevő” helyett „Bill to”).
+    """
     from reportlab.pdfgen import canvas
 
     buf = io.BytesIO()
