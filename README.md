@@ -41,6 +41,18 @@ Az alkalmazás címe: **http://localhost:8080**.
 3. **Számlalista:** keresés, szűrés, rendezés és lapozás. Egy sorra kattintva megjelennek a részletek és az
    üzenetek. Soronként megnyitható az eredeti PDF, és a számla törölhető.
 
+## Tesztelés
+- Az alkalmazás **automatizált tesztkészlete** (összesen 337 teszt) a fejlesztői konténerben, ideiglenes adatbázissal, valamint mockolt MNB- és LLM-válaszokkal fut, így nem érinti a futó alkalmazás adatait és nem generál külső API forgalmat.
+```bash
+# Az összes teszt futtatása (~45 mp)
+docker compose -f docker-compose.dev.yml run --rm app pytest -q
+```
+- A részletes tesztelési útmutatót, a szűrési parancsokat és az élő bemutatóhoz használható próbacsomag lépéseit a [TESZTELES.md](/TESZTELES.md) fájl tartalmazza, amely az alábbi négy fő szempont szerint csoportosítja a teszteket:
+  - Adatkinyerés
+  - Árfolyam-kiválasztás és átváltás
+  - Aggregálás
+  - Egyéb tesztek
+
 ## Architektúra
 
 ```
