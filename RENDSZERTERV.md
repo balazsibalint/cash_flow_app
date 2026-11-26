@@ -99,9 +99,12 @@ backend/
     mnb/                     rögzített SOAP-válaszok
     test_normalize.py  test_layout.py  test_doctype.py  test_extraction.py
     test_validate.py   test_llm.py     test_mnb.py      test_fx.py
-    test_report.py     test_api.py     test_partners.py
+    test_report.py     test_api.py     test_partners.py   test_edge_cases.py
+  scripts/
+    dump_extraction.py       egy mappa PDF-jeinek kinyert mezői (kézi ellenőrzés, LLM nélkül)
+    make_edge_cases.py       szintetikus próbacsomag hibás és szokatlan fájlokból, a várt eredménnyel (8. lépés)
 frontend/src/
-  api.ts  types.ts  format.ts
+  api.ts  types.ts  format.ts  labels.ts (státusz-, irány- és bizonylatfeliratok)
   components/ UploadPanel.tsx CashflowChart.tsx PartnerTable.tsx InvoiceTable.tsx ConfirmDialog.tsx
   App.tsx
 ```
@@ -172,7 +175,9 @@ helyette `LLM_MAX_CALLS_PER_DAY` van.
 | `created_at`, `updated_at` | datetime | |
 
 Egyedi index: **`UNIQUE(seller_tax_key, invoice_number_norm)`**, ahol mindkettő nem NULL (SQLite partial index).
-Az `error` és a `rejected` sorokat is elmentjük, hogy a lista mutassa őket, és ugyanaz a fájl ne fusson újra (LLM-költség).
+Az `error` és a `rejected` sorokat is elmentjük, hogy ugyanaz a fájl ne fusson újra (LLM-költség). Az `error` sorokat a
+lista mutatja; a `rejected` bizonylatok a felületen csak a feltöltési naplóban jelennek meg (a számlalistában és a
+„Figyelmet igényel” csempében nem), az „Összes törlése” azonban őket is törli.
 
 ### 4.2 `partners`
 
@@ -229,6 +234,9 @@ Az alkalmazás nem áll le, és a következő fájl feldolgozása is folytatódi
 - `PdfDocument.pages[i].words`: a `pdfplumber` `extract_words(keep_blank_chars=False, x_tolerance=1.5, y_tolerance=3)` eredménye (`text, x0, x1, top, bottom`).
 - `lines`: a szavak `top` szerint, ±3 pt toleranciával csoportosítva, majd `x0` szerint rendezve. Minden sor megkapja az oldalszámot és a globális sorindexet (a többoldalas számlák összefűzéséhez).
 - `full_text`: az oldalak `extract_text()` eredménye összefűzve (a doctype, a kulcsszavak és az LLM használja).
+- Olvasási hibák (mind `status=error`, magyar üzenettel): sérült vagy csonka fájl; **megnyitási jelszóval titkosított**
+  PDF (`PDFPasswordIncorrect`, külön üzenettel – 8. lépés); szöveg nélküli PDF. A csak tulajdonosi jelszavas
+  (jogosultság-korlátozott) PDF olvasható.
 - **Egymásra nyomtatott szöveg** (a 2. lépésben derült ki, `NWS/2026/0044`): a nagy betűs „Fizetendő összesen / Total due”
   címke és a „8 743,00 GBP” érték ugyanarra a sávra esik, ezért az x szerint rendezett szöveg összekeveri őket
   („Tota8l d7u4e3,00”). Kezelés: a szavakat a PDF-tartalomfolyam sorrendjében is előállítjuk (`use_text_flow=True`),
@@ -467,12 +475,47 @@ A statikus mount (`/`) a routerek **után** kerül regisztrálásra.
 |---|---|
 | `UploadPanel` | Drag & drop és tallózás (`multiple`, `accept=application/pdf`). Feltöltési sor: **4 párhuzamos** kérés (K10). Fájlonkénti sor ikonnal: ⏳ / ✓ új / ↺ már feldolgozva / ⚠ ellenőrzendő / ⛔ elutasítva / ✗ hiba, az üzenettel. Összesítő sáv és haladásjelző. A köteg végén a riport és a lista újratöltődik. |
 | `CashflowChart` | Recharts `LineChart`: X = `YYYY-MM`, Y = HUF; két vonal (bejövő, kimenő), eltérő színnel; `Legend`, tengelyfeliratok („Fizetési határidő (hónap)”, „Bruttó összeg (Ft)”), tooltip `1 234 567 Ft` formátumban, Y-tengelyen rövidített értékek (`1,2 M`). |
-| `PartnerTable` | Transzponált tábla: oszlopok = partnerek (forgalom szerint), sorok = Össz bejövő / Össz kimenő; rögzített első oszlop, vízszintes görgetés, a név `title` tooltipjében a változatok, a `0` értékek halványítva. |
-| `InvoiceTable` | Oszlopok: státusz, irány, számlaszám, partner, kiállító (név, adószám), vevő (név, adószám), kiállítás, teljesítés, határidő, eredeti összeg és pénznem, árfolyam (unit), árfolyam dátuma (+ „ideiglenes” jelvény), HUF-összeg, kinyerési mód (szabály/LLM), üzenetek. Szűrés státuszra, irányra, partnerre; rendezés oszlopfejlécre. Soronként PDF-megnyitás és törlés. |
+| `PartnerTable` | Transzponált tábla: oszlopok = partnerek (forgalom szerint), sorok = Össz bejövő / Össz kimenő; rögzített első oszlop, vízszintes görgetés, a (levágott) teljes név a `title` tooltipben – a névváltozatokat nem jelenítjük meg –, a `0` értékek halványítva. |
+| `InvoiceTable` | Oszlopok: státusz, irány, számlaszám, partner, kiállító (név, adószám), vevő (név, adószám), kiállítás, teljesítés, határidő, eredeti összeg és pénznem, árfolyam (unit), árfolyam dátuma (+ „ideiglenes” jelvény), HUF-összeg, kinyerési mód (szabály/LLM), üzenetek. Szűrés státuszra, irányra, partnerre; rendezés oszlopfejlécre. Soronként PDF-megnyitás és törlés; a sorra bárhol kattintva nyílnak le a részletek. Az elutasított bizonylatok nem szerepelnek benne. Lapozás (10 / 25 / 50 / 100 sor oldalanként, alapértelmezés 10); a lista magassága az aktuális oldal sorait követi (a nem teli utolsó oldal alacsonyabb), belső görgetés nélkül. |
 | `ConfirmDialog` | Törlés-megerősítés (egyenkénti és összes, K12). |
 
 Formázás (`format.ts`): `Intl.NumberFormat('hu-HU')` (szóközös ezres tagolás), a dátum `YYYY.MM.DD.`, a devizaösszeg a pénznem tizedesjegyeivel.
 Az oldal sorrendje: fejléc → feltöltés → diagram → partnertábla → számlalista (FELADAT 5.).
+
+### 9.1 Megvalósítás (7. lépés) – részletek és eltérések
+
+- **Új függőség:** `recharts@3.10.1` és a peer-függősége, `react-is@19.3.1` (pontos verzióval). A legfrissebb kiadás (3.11.1)
+  3 napos volt, ezért a júliusi stabil verziót választottuk. A bundle így ~627 kB (gzip ~185 kB); a Vite 500 kB-os
+  figyelmeztetése egy helyi alkalmazásnál elfogadható.
+- **Feltöltés:** legfeljebb 4 worker veszi ki a fájlokat a sorból (K10). A kimutatás 20 fájlonként és a köteg végén frissül.
+  A nem PDF kiterjesztésű/típusú fájlt a böngésző fel sem küldi; a méret- és tartalomellenőrzés a szerveren történik.
+  A napló szűrhető a problémás fájlokra (ellenőrzendő, elutasított, hibás).
+- **Összesítő csempék** a diagram fölött: össz bejövő, össz kimenő, a kimutatásba számító számlák (és az ideiglenes
+  árfolyamúak), valamint a figyelmet igénylők száma (ellenőrzendő + árfolyamra vár + hibás; az elutasítottak nem),
+  státuszonkénti bontás nélkül.
+- **Diagram:** a két sorozat színe a validált referencia-paletta első két helye (kék `#2a78d6` bejövő, narancs `#eb6834`
+  kimenő; színtévesztés-szimulációval ellenőrizve). 2 px-es vonalak, pontjelölők, vízszintes rácsvonalak, crosshair és
+  tooltip. A vonalvégi névfelirat elmarad, ha a két végpont a skála 8%-ánál közelebb van egymáshoz (különben egymásra
+  csúsznának); a jelmagyarázat mindig látszik. (A korábbi „Táblázat” nézetet felhasználói kérésre elhagytuk; a havi
+  értékek a tooltipben olvashatók.)
+- **Számlalista:** szabad szöveges keresés (számlaszám, név, adószám, fájlnév) a státusz-, irány- és partnerszűrő mellett;
+  a sor kibontva a fájlnevet, a nettó/ÁFA összeget, a státusz okát és az összes üzenetet mutatja.
+  A kikövetkeztetett dátumokat `*` jelzi (K6).
+- **Felhasználói kérésre módosítva (a 7. lépés után):** az elutasított bizonylatok kikerültek a számlalistából, a
+  státuszszűrőből és a „Figyelmet igényel” csempéből; a kibontott sorból a bizonylattípus, a partnertábla fejlécéből az
+  „n névváltozat” felirat, és a fejléc tooltipje is csak a teljes nevet mutatja (a változatokat nem). A „Kimutatásban”
+  csempe alsó sora csak az ideiglenes árfolyamú számlák számát mutatja (ha van ilyen). A számlalista lapozó alatta
+  (10/25/50/100, alapértelmezés 10); a doboz magassága az aktuális oldal sorait követi, belső görgetés nélkül (a nem
+  teli utolsó oldalon csak a maradék sorok férnek el). A sorra bárhol kattintva lenyílnak a részletek (a PDF-link, a
+  Törlés gomb és a szövegkijelölés kivétel). Szűrés, rendezés és oldalméret-váltás az első oldalra ugrik; ha törlés után
+  az aktuális oldal megszűnik, az utolsó létező oldal látszik. A diagramról lekerült a „Táblázat” nézet, a fejlécből az
+  „LLM-tartalék: …” jelzés (az `llm_enabled` mező a `/api/health` válaszában megmaradt).
+- **Hibajavítás a böngészős ellenőrzésből:** a táblák görgethető keretei `relative` osztályt kaptak. Nélküle a
+  fejléc `sr-only` (abszolút pozíciójú) felirata kiszökött a keretből, és vízszintes görgetést okozott az egész oldalon.
+- A sérült PDF hibaüzenete csak magyar szöveget tartalmaz; a pdfminer angol technikai üzenete a naplóba kerül.
+- **Ellenőrzés (LLM kikapcsolva):** a böngészőből feltöltött 100 fájl 16 mp alatt 100 új számla; oldal-újratöltés után
+  minden megmaradt; a 99 meglévő újrafeltöltése 99 „már feldolgozva”; egy nem PDF, egy sérült és egy 21 MB-os fájl a
+  saját hibaüzenetével jelent meg; egyenkénti törlés a megerősítő ablakkal.
 
 ---
 
@@ -542,6 +585,7 @@ Az összehasonlítás normalizált formában történik (adószám → `tax_key`
 | `test_report.py` | folytonos hónapok 0-val; partner-összevonás belföldi és EU adószámmal; rendezés; csak `ok` státusz számít |
 | `test_api.py` | feltöltés → created; ugyanaz újra → duplicate (hash), más fájl ugyanazzal a kulccsal → duplicate; nem PDF → 400; sérült PDF → error, az app tovább fut; törlés egyenként és összesen; MNB-kiesés → pending_fx és újrapróbálás; ideiglenes árfolyam véglegesítése; párhuzamos feltöltés; a 15 fixture végig a riportig |
 | `test_partners.py` | belföldi és EU-adószám → egy kulcs; saját kulcs kizárása; név szerinti partner összevonása az adószámossal; megjelenített név (K13); árva partner törlése |
+| `test_edge_cases.py` | a `scripts/make_edge_cases.py` próbacsomagja végig a HTTP-folyamaton: sérült, szöveg nélküli, jelszavas PDF → `error`; idegen, jóváíró, proforma, negatív végösszeg → `rejected`; K6-következtetés → `ok` figyelmeztetéssel; határidő nélkül → `review`; jövőbeli teljesítés → ideiglenes; nem PDF és üres fájl → 400; a csomag után a riportban csak az `ok` számlák |
 
 A szintetikus teszt-PDF-ek (jóváíró, ismeretlen elrendezés, hiányzó határidő) a tesztben generálódnak a `reportlab` dev-függőséggel
 (`requirements-dev.txt`), így nem kell őket a repóban tárolni.
@@ -565,6 +609,21 @@ Minden lépés végén: a tesztek zöldek, `docker compose up --build` indul, é
 | 7 | **Frontend:** feltöltő panel → diagram → partnertábla → számlalista | A teljes csomag feltöltése a böngészőből, majd frissítés után minden megmarad |
 | 8 | **Robusztusság:** szintetikus és hibás fájlok, K6/K7/K8/K9 élesben; **README.md** | Egy sérült, egy idegen és egy jóváíró fájl helyes státusszal jelenik meg |
 
+### 11.1 Megvalósítás (8. lépés) – részletek
+
+- **Próbacsomag:** `backend/scripts/make_edge_cases.py` 12 szintetikus fájlt állít elő a várt eredménnyel (a saját cég
+  adatai a konfigurációból, a dátumok a futtatás napjához igazodnak). A kimenet (`backend/edge_cases/`) a `.gitignore`-ban
+  és a `.dockerignore`-ban van. Ugyanezt a csomagot futtatja a `tests/test_edge_cases.py`.
+- **Új kezelés:** a jelszóval védett PDF eddig „sérült vagy hiányos fájl” üzenetet kapott; most saját üzenetet kap.
+- **Élő ellenőrzés (éles konténer, valódi MNB, LLM kikapcsolva):** a 12 fájl mindegyike a várt eredményt adta
+  (3 `error`, 4 `rejected`, K6 → `ok` két figyelmeztetéssel, `review`, K8 → `ok` ideiglenes árfolyammal, 2 × HTTP 400).
+  K9: elérhetetlen `MNB_URL`-lel egy GBP-számla `pending_fx` lett, a szerver közben is válaszolt; a valódi MNB
+  visszaállítása után a következő feltöltés pótolta az árfolyamot (2026-11-23-i jegyzés). A felületen a feltöltési
+  napló minden fájlnál a magyar indoklást mutatta; az elutasítottak a számlalistában nem jelennek meg (felhasználói
+  döntés, 9.1).
+- **README.md:** indítás, architektúra, kinyerés és ismeretlen formátumok, LLM-ellenőrzés és modellválasztás,
+  MNB-árfolyam, státuszok, konfiguráció, tesztek, korlátok, továbbfejlesztés.
+
 ---
 
 ## 12. Nem funkcionális követelmények
@@ -579,5 +638,6 @@ Minden lépés végén: a tesztek zöldek, `docker compose up --build` indul, é
 - A szabályalapú kinyerés a címkeszótárra épül: egy teljesen ismeretlen nyelvű vagy címke nélküli sablon az LLM-tartalékra szorul, kulcs nélkül `review` státuszt kap.
 - A `DD/MM` és `MM/DD` kétértelműséget heurisztika dönti el (a nyelv és az érvényesség alapján).
 - Szkennelt (képes) PDF-et nem kezelünk (a feladat szerint nincs ilyen); üres szöveg esetén `error` státuszt adunk.
+  A megnyitási jelszóval védett PDF szintén `error`.
 - A különleges bizonylatokat (jóváíró, proforma, előleg) szándékosan elutasítjuk (K7), így a nettósított cash-flow ezekkel nem számol.
 - Az ideiglenes árfolyam (K8) a következő feltöltésig marad érvényben, mert nincs ütemezett háttérfrissítés.

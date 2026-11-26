@@ -1,10 +1,14 @@
 import io
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pdfplumber
+from pdfminer.pdfdocument import PDFPasswordIncorrect
 
 from app.services.extraction.normalize import fold
+
+log = logging.getLogger(__name__)
 
 LINE_TOLERANCE = 3.0
 MIN_SEGMENT_GAP = 6.0
@@ -156,8 +160,13 @@ def load_pdf(source: bytes | str | Path) -> PdfDocument:
                 index += len(lines)
                 pages.append(Page(pno, float(pg.width), float(pg.height), lines))
                 texts.append(pg.extract_text() or "")
+    except PDFPasswordIncorrect as exc:
+        # Megnyitási jelszó: a tartalom titkosított. (A csak tulajdonosi jelszó nem akadály, az ilyen PDF olvasható.)
+        raise PdfReadError("A PDF jelszóval védett, ezért nem olvasható. Töltse fel jelszó nélküli változatát.") from exc
     except Exception as exc:  # pdfminer sokféle kivételt dob sérült fájlra
-        raise PdfReadError(f"A fájl nem olvasható PDF-ként: {exc}") from exc
+        # A pdfminer angol nyelvű technikai üzenete csak a naplóba kerül; a felhasználó magyar szöveget kap.
+        log.warning("PDF-olvasási hiba: %s: %s", type(exc).__name__, exc)
+        raise PdfReadError("A fájl nem olvasható PDF-ként (sérült vagy hiányos fájl).") from exc
 
     if not any(p.lines for p in pages):
         raise PdfReadError("A PDF nem tartalmaz kinyerhető szöveget (lehet, hogy szkennelt kép).")

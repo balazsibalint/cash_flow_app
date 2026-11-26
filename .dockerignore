@@ -14,3 +14,4 @@ backend/data/
 **/*.sqlite3
 
 backend/tests/
+backend/edge_cases/

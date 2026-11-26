@@ -24,16 +24,20 @@ def make_doc(rows: list[tuple[float, list[tuple[float, str]]]], size: float = 9.
     return PdfDocument(pages=[Page(1, PAGE_W, PAGE_H, lines)], full_text="\n".join(ln.text for ln in lines))
 
 
-def make_pdf(items: list[tuple[float, float, str]] | None, size: float = 9.0, draw_only: bool = False) -> bytes:
+def make_pdf(items: list[tuple[float, float, str]] | None, size: float = 9.0, draw_only: bool = False,
+             user_password: str | None = None) -> bytes:
     """Valódi PDF: `items` = [(x, top, szöveg)], a koordináták felülről mérve (mint a pdfplumber-nél).
 
+    `user_password`: titkosított PDF ezzel a megnyitási jelszóval (`""` = csak tulajdonosi jelszó, megnyitható).
     Figyelem: a beépített Helvetica csak Latin-1 karaktereket tud – az `ő`/`ű` betűk elvesznek,
     ezért a szintetikus PDF-ekben ilyen betűt tartalmazó címkét ne használj (pl. „Vevő” helyett „Bill to”).
     """
+    from reportlab.lib.pdfencrypt import StandardEncryption
     from reportlab.pdfgen import canvas
 
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=(PAGE_W, PAGE_H))
+    encrypt = StandardEncryption(user_password, ownerPassword="owner") if user_password is not None else None
+    c = canvas.Canvas(buf, pagesize=(PAGE_W, PAGE_H), encrypt=encrypt)
     if draw_only:
         c.rect(50, 50, 200, 100, fill=1)
     for x, top, text in items or []:

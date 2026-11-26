@@ -16,6 +16,8 @@ frontend/dist/
 *.sqlite3
 backend/data/
 invoices/
+# A scripts/make_edge_cases.py kimenete (bármikor újragenerálható)
+backend/edge_cases/
 
 # OS / IDE
 .DS_Store

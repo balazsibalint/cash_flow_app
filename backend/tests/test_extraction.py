@@ -177,3 +177,14 @@ def test_corrupt_pdf_raises_read_error():
 def test_pdf_without_text_raises_read_error():
     with pytest.raises(PdfReadError):
         load_pdf(make_pdf(None, draw_only=True))
+
+
+def test_password_protected_pdf_has_specific_message():
+    with pytest.raises(PdfReadError, match="jelszóval védett"):
+        load_pdf(make_pdf([(40, 40, "Szamlaszam: X-1")], user_password="titok"))
+
+
+def test_owner_password_only_pdf_is_readable():
+    # Csak jogosultság-korlátozás (üres megnyitási jelszó): a szöveg kiolvasható.
+    doc = load_pdf(make_pdf([(40, 40, "Szamlaszam: X-1")], user_password=""))
+    assert "Szamlaszam" in doc.full_text

@@ -143,7 +143,7 @@ def test_too_large_file_is_413(env, monkeypatch):
 def test_corrupt_pdf_is_error_and_app_keeps_working(env):
     r = upload(env, b"%PDF-1.4\n garbage garbage", "torott.pdf").json()
     assert r["result"] == "error" and r["invoice"]["status"] == "error"
-    assert "PDF" in r["invoice"]["status_reason"]
+    assert r["invoice"]["status_reason"] == "A fájl nem olvasható PDF-ként (sérült vagy hiányos fájl)."
     assert env.client.get("/api/health").json()["status"] == "ok"
     assert upload(env, invoice_pdf()).json()["result"] == "created"
 

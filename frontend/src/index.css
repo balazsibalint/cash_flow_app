@@ -1,1 +1,37 @@
 @import "tailwindcss";
+
+/* Világos téma (K15). A sorozatszínek az adatvizualizációs referencia-paletta első két helye
+   (színtévesztő-szimulációval ellenőrizve); az állapotszínek fenntartottak, mindig ikonnal és felirattal. */
+@theme {
+  --color-page: #f4f4f1;
+  --color-surface: #fcfcfb;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #52514e;
+  --color-ink-3: #85847d;
+  --color-hairline: #e1e0d9;
+  --color-axis: #c3c2b7;
+
+  --color-incoming: #2a78d6;
+  --color-outgoing: #eb6834;
+
+  --color-good: #0ca30c;
+  --color-good-text: #006300;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
